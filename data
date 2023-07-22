@@ -1,0 +1,183 @@
+var ui = SpreadsheetApp.getUi();
+
+function onOpen() 
+{ 
+  
+  // Try New Google Sheets method
+  try{
+    ui.createMenu('Alfa-One')
+    .addItem('Collect Daily Report', 'ShowDateDialog')
+    .addItem('Backup Weekly Report', 'backupWeeklyReport')
+   // .addItem('Show sidebar', 'showSidebar')
+  //  .addItem('Archive Sheet1', 'archiveSheet1')
+    .addToUi(); 
+  } 
+  
+  // Log the error
+  catch (e){Logger.log(e)}
+  
+  // Use old Google Spreadsheet method
+  finally{
+    var items = [
+      {name: 'Collect Daily Report', functionName: 'ShowDateDialog'},
+      {name: 'Backup Weekly Report', functionName: 'backupWeeklyReport'}//,
+//      {name: 'Show sidebar', functionName: 'showSidebar'},
+      //{name: 'Archive Sheet1', functionName: 'archiveSheet1'}
+    ];
+  //  var ss = SpreadsheetApp;
+   //   ss.addMenu('Alfa-One', items);
+  }
+}
+
+//function showSidebar() {
+//  var html = HtmlService.createHtmlOutputFromFile('Page')
+//      .setTitle('My custom sidebar')
+//      .setWidth(300);
+// SpreadsheetApp.getUi()
+//      .showSidebar(html);
+//}
+      
+function ShowDateDialog()
+{
+  var html = HtmlService.createHtmlOutputFromFile('Calendar')
+      .setWidth(350)
+      .setHeight(300);
+  var dialog = ui.showModalDialog(html, 'Please provide a Date');
+  Logger.log("HTML return = %s", html.getContent());     // What does html contain?
+}
+      
+function processForm(formObject) {
+  //var ui = SpreadsheetApp.getUi();
+  //ui.alert(JSON.stringify(formObject));
+  var rundate = formObject.RunDate;
+  ui.alert("Calculation of "+rundate+" started.");
+  GenerateReport(rundate);
+}
+
+function GenerateReport(shiftDate_string)
+{
+ // shiftDate_string='31-01-2023';
+ /// SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Sheet74').activate();
+ // var thisSheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
+ // thisSheet.getRange(1, 1).setValue(shiftDate_string);
+  
+  var TimeZone = SpreadsheetApp.getActive().getSpreadsheetTimeZone();
+  var year = shiftDate_string.substring(6,10);
+  var month = shiftDate_string.substring(3,5);
+  var day = shiftDate_string.substring(0,2);
+  var shiftDate = new Date(year, month-1, day);
+  var DayAsFloat = shiftDate.getDay();
+  
+  var app;
+  app = SpreadsheetApp.openById('1W3B4taWkDByDAHR53Ee8LoQk_tMMUmpD584OUhhPfzw');
+  var ConfirmedRunsSheet = app.getSheetByName('Confirmed Runs');
+  var ConfirmedRunsLastRow = ConfirmedRunsSheet.getLastRow();
+  var count=0;
+  for (var ConfirmedRunsRowNum=2; ConfirmedRunsRowNum<=ConfirmedRunsLastRow; ConfirmedRunsRowNum++)
+  {
+    var CountedToDriverReport = ConfirmedRunsSheet.getRange(ConfirmedRunsRowNum,24).getValue().trim();
+    var Company = ConfirmedRunsSheet.getRange(ConfirmedRunsRowNum,1).getValue().trim();
+    var Status = ConfirmedRunsSheet.getRange(ConfirmedRunsRowNum,22).getValue().trim();
+    var l_shiftDate = ConfirmedRunsSheet.getRange(ConfirmedRunsRowNum,5).getValue().trim();
+    
+    Status = Status.substring(0, 18);
+    Status = Status.toUpperCase();
+    if (CountedToDriverReport == '' && Status=='TIMESHEET PROVIDED' && Company == 'Alfa-1' && l_shiftDate == shiftDate_string)
+    {
+      var DriverID = ConfirmedRunsSheet.getRange(ConfirmedRunsRowNum,10).getValue().toString().trim();;
+      var kms = ConfirmedRunsSheet.getRange(ConfirmedRunsRowNum,17).getValue();
+      var drops = ConfirmedRunsSheet.getRange(ConfirmedRunsRowNum,16).getValue();
+      var weight = ConfirmedRunsSheet.getRange(ConfirmedRunsRowNum,18).getValue();
+      var lfx_hours = ConfirmedRunsSheet.getRange(ConfirmedRunsRowNum, 21).getValue(); 
+      var ts_hours = ConfirmedRunsSheet.getRange(ConfirmedRunsRowNum, 23).getValue();
+      var result = WriteToDriverReportSheet(DayAsFloat, DriverID, kms, drops, weight, lfx_hours, ts_hours, shiftDate_string)
+      if (result == 'OK')
+      {
+        ConfirmedRunsSheet.getRange(ConfirmedRunsRowNum, 24).setValue('COUNTED');
+        count = count + 1;
+      }
+    }
+  }
+  ui.alert("Copied "+count+" runs to Report.");
+}
+
+function WriteToDriverReportSheet(DayAsFloat, DriverID, kms, drops, weight, lfx_hours, ts_hours, shiftDate_string)
+{
+  var day="";
+  var EcolumnNumber=0;
+    switch (DayAsFloat)
+    {
+      case 1:
+      day = 'Monday';
+      EcolumnNumber = 3   
+      break;
+        
+      case 2:
+      day = 'Tuesday';
+      EcolumnNumber = 9  
+      break;
+        
+      case 3:
+      day = 'Wednesday';
+      EcolumnNumber = 15;
+      break;
+        
+      case 4:
+      day = 'Thursday';
+      EcolumnNumber = 21;
+      break;  
+      
+      case 5:
+      day = 'Friday';
+      EcolumnNumber = 27;
+      break;
+        
+      case 6:
+      day = 'Saturday';
+      EcolumnNumber = 33;
+      break;
+        
+      case 0:
+      day = 'Sunday';
+      EcolumnNumber = 39;
+      break;  
+      
+      default:
+      day=DayAsFloat+'-NOTCLEAR:'+shiftDate_string;
+      EcolumnNumber = 55;
+      break;
+    }
+  SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Drivers Weekly Report - Extended').activate();
+  var DriverWeeklyExtended = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
+  var DriverWeeklyExtendedLR = DriverWeeklyExtended.getLastRow();
+  DriverWeeklyExtended.getRange(1, EcolumnNumber).setValue(day+':'+shiftDate_string);
+  
+  for (var RowNum=3; RowNum<=DriverWeeklyExtendedLR; RowNum++)
+    {
+      var driverID = DriverWeeklyExtended.getRange(RowNum, 2).getValue().toString().trim();;
+      if (driverID == DriverID)
+      {       
+        var shifts = DriverWeeklyExtended.getRange(RowNum, EcolumnNumber).getValue();
+        var lDrops = DriverWeeklyExtended.getRange(RowNum, EcolumnNumber+1).getValue();
+        var lKMS = DriverWeeklyExtended.getRange(RowNum, EcolumnNumber+2).getValue()
+        var lWeight = DriverWeeklyExtended.getRange(RowNum, EcolumnNumber+3).getValue();
+        var lHours = DriverWeeklyExtended.getRange(RowNum, EcolumnNumber+4).getValue();
+        var tsHours = DriverWeeklyExtended.getRange(RowNum, EcolumnNumber+5).getValue();    
+
+        shifts = shifts + 1;
+        lDrops = lDrops + drops;
+        lKMS = lKMS + kms;
+        lWeight = lWeight + weight;
+        lHours = lHours + lfx_hours;
+        tsHours = tsHours +ts_hours; 
+        
+        DriverWeeklyExtended.getRange(RowNum, EcolumnNumber).setValue(shifts);
+        DriverWeeklyExtended.getRange(RowNum, EcolumnNumber+1).setValue(lDrops);
+        DriverWeeklyExtended.getRange(RowNum, EcolumnNumber+2).setValue(lKMS);
+        DriverWeeklyExtended.getRange(RowNum, EcolumnNumber+3).setValue(lWeight);
+        DriverWeeklyExtended.getRange(RowNum, EcolumnNumber+4).setValue(lHours);
+        DriverWeeklyExtended.getRange(RowNum, EcolumnNumber+5).setValue(tsHours);
+        return 'OK';
+      }
+    }
+}
